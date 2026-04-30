@@ -50,21 +50,23 @@ func ListCandidatePorts() ([]string, error) {
 	return out, nil
 }
 
-func FirstAvailablePort(baud int) (string, error) {
+func FirstAvailablePort(preferredBaud int) (string, int, error) {
 	ports, err := ListCandidatePorts()
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	if len(ports) == 0 {
-		return "", fmt.Errorf("no USB GPS serial port found")
+		return "", 0, fmt.Errorf("no USB GPS serial port found")
 	}
-	for _, port := range ports {
-		ok, err := ProbePort(port, baud, 3*time.Second)
-		if err == nil && ok {
-			return port, nil
+	for _, baud := range probeBauds(preferredBaud) {
+		for _, port := range ports {
+			ok, err := ProbePort(port, baud, 3*time.Second)
+			if err == nil && ok {
+				return port, baud, nil
+			}
 		}
 	}
-	return "", fmt.Errorf("no GPS NMEA device found on candidate serial ports")
+	return "", 0, fmt.Errorf("no GPS NMEA device found on candidate serial ports")
 }
 
 func (r *Reader) Latest() Fix {
@@ -122,7 +124,12 @@ func (r *Reader) OpenAndRead(onFix func(Fix)) error {
 func (r *Reader) resolvePort() (string, error) {
 	if r.PortName == "" || r.PortName == "auto" {
 		r.setConnectionState("", "probing GPS ports")
-		return FirstAvailablePort(r.Baud)
+		port, baud, err := FirstAvailablePort(r.Baud)
+		if err != nil {
+			return "", err
+		}
+		r.Baud = baud
+		return port, nil
 	}
 	return r.PortName, nil
 }
@@ -155,6 +162,23 @@ func (r *Reader) readFromPort(portName string, onFix func(Fix)) error {
 			onFix(fix)
 		}
 	}
+}
+
+func probeBauds(preferred int) []int {
+	order := []int{preferred, 4800, 9600, 38400, 19200, 57600, 115200}
+	seen := map[int]bool{}
+	var out []int
+	for _, baud := range order {
+		if baud <= 0 || seen[baud] {
+			continue
+		}
+		seen[baud] = true
+		out = append(out, baud)
+	}
+	if len(out) == 0 {
+		return []int{4800, 9600, 38400}
+	}
+	return out
 }
 
 func isTimeoutErr(err error) bool {

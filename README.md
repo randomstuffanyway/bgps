@@ -49,10 +49,16 @@ Prepare offline pack archive while online:
 ./bin/prepare_trekking --gpx ./route.gpx --out ./offline_pack.tar.gz --name "My Trek"
 ```
 
-Run viewer with archive path:
+Run viewer with archive path (`--port auto` is default):
 
 ```bash
-./bin/trekking_viewer --pack ./offline_pack.tar.gz --port auto --baud 4800 --fullscreen
+./bin/trekking_viewer --pack ./offline_pack.tar.gz --fullscreen
+```
+
+Or force specific device:
+
+```bash
+./bin/trekking_viewer --pack ./offline_pack.tar.gz --port /dev/ttyACM1 --fullscreen
 ```
 
 Viewer extracts archive to temp dir automatically.
