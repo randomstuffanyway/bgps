@@ -32,7 +32,7 @@ type Reader struct {
 }
 
 func ListCandidatePorts() ([]string, error) {
-	patterns := []string{"/dev/ttyUSB*", "/dev/ttyACM*", "/dev/serial/by-id/*"}
+	patterns := []string{"/dev/serial/by-id/*", "/dev/ttyUSB*", "/dev/ttyACM*"}
 	seen := map[string]bool{}
 	var out []string
 	for _, pattern := range patterns {
@@ -50,7 +50,7 @@ func ListCandidatePorts() ([]string, error) {
 	return out, nil
 }
 
-func FirstAvailablePort() (string, error) {
+func FirstAvailablePort(baud int) (string, error) {
 	ports, err := ListCandidatePorts()
 	if err != nil {
 		return "", err
@@ -58,7 +58,13 @@ func FirstAvailablePort() (string, error) {
 	if len(ports) == 0 {
 		return "", fmt.Errorf("no USB GPS serial port found")
 	}
-	return ports[0], nil
+	for _, port := range ports {
+		ok, err := ProbePort(port, baud, 3*time.Second)
+		if err == nil && ok {
+			return port, nil
+		}
+	}
+	return "", fmt.Errorf("no GPS NMEA device found on candidate serial ports")
 }
 
 func (r *Reader) Latest() Fix {
@@ -115,7 +121,8 @@ func (r *Reader) OpenAndRead(onFix func(Fix)) error {
 
 func (r *Reader) resolvePort() (string, error) {
 	if r.PortName == "" || r.PortName == "auto" {
-		return FirstAvailablePort()
+		r.setConnectionState("", "probing GPS ports")
+		return FirstAvailablePort(r.Baud)
 	}
 	return r.PortName, nil
 }
@@ -156,6 +163,60 @@ func isTimeoutErr(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "timeout")
+}
+
+func ProbePort(portName string, baud int, timeout time.Duration) (bool, error) {
+	if baud == 0 {
+		baud = 4800
+	}
+	if timeout <= 0 {
+		timeout = 3 * time.Second
+	}
+	port, err := serial.Open(portName, &serial.Mode{BaudRate: baud})
+	if err != nil {
+		return false, err
+	}
+	defer port.Close()
+	_ = port.SetReadTimeout(500 * time.Millisecond)
+	reader := bufio.NewReader(port)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if isTimeoutErr(err) {
+				continue
+			}
+			return false, err
+		}
+		if isLikelyNMEA(strings.TrimSpace(line)) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func isLikelyNMEA(line string) bool {
+	if line == "" || line[0] != '$' {
+		return false
+	}
+	star := strings.LastIndexByte(line, '*')
+	if star < 0 || star+3 > len(line) {
+		return false
+	}
+	if len(line) < 6 {
+		return false
+	}
+	head := strings.SplitN(line[1:star], ",", 2)[0]
+	if len(head) < 5 {
+		return false
+	}
+	typ := head[len(head)-3:]
+	switch typ {
+	case "RMC", "GGA", "GSA", "GSV", "VTG", "GLL", "ZDA":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseNMEA(line string) (Fix, bool) {
