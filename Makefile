@@ -73,7 +73,7 @@ deb-aarch64: aarch64
 pack-tar:
 	mkdir -p $(DIST_DIR)
 	test -d $(PACK_DIR)
-	tar -czf $(DIST_DIR)/$(PACK_BASENAME).tar.gz -C $(dir $(abspath $(PACK_DIR))) $(PACK_BASENAME)
+	tar -czf $(DIST_DIR)/$(PACK_BASENAME).tar.gz -C $(abspath $(PACK_DIR)) .
 
 clean:
 	rm -rf $(BIN_DIR) $(DIST_DIR)

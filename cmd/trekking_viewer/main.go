@@ -494,7 +494,8 @@ func openPack(packPath string) (string, func(), error) {
 		return "", func() {}, err
 	}
 	if info.IsDir() {
-		return packPath, func() {}, nil
+		dir, err := findManifestDir(packPath)
+		return dir, func() {}, err
 	}
 	if !strings.HasSuffix(strings.ToLower(packPath), ".tar.gz") {
 		return "", func() {}, fmt.Errorf("pack must be directory or .tar.gz archive")
@@ -507,5 +508,30 @@ func openPack(packPath string) (string, func(), error) {
 		os.RemoveAll(tmpDir)
 		return "", func() {}, err
 	}
-	return tmpDir, func() { _ = os.RemoveAll(tmpDir) }, nil
+	dir, err := findManifestDir(tmpDir)
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		return "", func() {}, err
+	}
+	return dir, func() { _ = os.RemoveAll(tmpDir) }, nil
+}
+
+func findManifestDir(root string) (string, error) {
+	if _, err := os.Stat(filepath.Join(root, "manifest.json")); err == nil {
+		return root, nil
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		candidate := filepath.Join(root, entry.Name())
+		if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("unable to find manifest.json in pack")
 }
