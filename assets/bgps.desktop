@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=bgps Trekking Viewer
+Comment=Offline trekking GPS viewer
+Exec=trekking_viewer
+Icon=bgps
+Terminal=false
+Categories=Education;Science;Geography;
+Keywords=GPS;GPX;Map;Trekking;Hiking;

@@ -1,0 +1,7 @@
+bin/
+dist/
+gpxs/
+offline_pack/
+offline_pack.tar.gz
+*-tracks/
+main
